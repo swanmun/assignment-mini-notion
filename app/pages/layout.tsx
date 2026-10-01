@@ -25,6 +25,7 @@ function Sidebar() {
   const { id: activeId } = useParams<{ id?: string }>();
   const router = useRouter();
   const [cmd, setCmd] = useState("");
+  const [query, setQuery] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
   // Keep the relative timestamps ("방금", "어제") fresh.
@@ -33,7 +34,11 @@ function Sidebar() {
     return () => clearInterval(t);
   }, []);
 
-  const sorted = sortPages(pages);
+  // 글 검색: 제목·본문에 검색어가 포함된 글만 (대소문자 무시)
+  const q = query.trim().toLowerCase();
+  const sorted = sortPages(pages).filter(
+    (p) => !q || displayTitle(p).toLowerCase().includes(q) || p.content.toLowerCase().includes(q),
+  );
   const showPalette = cmd.startsWith("/");
   const matchesPage = "/page".startsWith(cmd.trim());
 
@@ -62,11 +67,21 @@ function Sidebar() {
       <div className="ws-section">
         <span>내 글</span>
         <span className="leader-line" />
-        <span className="num">{String(pages.length).padStart(2, "0")}</span>
+        <span className="num">{String(q ? sorted.length : pages.length).padStart(2, "0")}</span>
+      </div>
+
+      <div className="ws-search">
+        <Input
+          type="search"
+          placeholder="글 검색"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+        />
       </div>
 
       <nav className="ws-list">
-        {sorted.length === 0 && <div className="ws-empty">아직 글이 없습니다.</div>}
+        {sorted.length === 0 && <div className="ws-empty">{q ? "검색 결과가 없습니다." : "아직 글이 없습니다."}</div>}
         {sorted.map((p) => (
           <Link key={p.id} href={`/pages/${p.id}`} className={`ws-row${p.id === activeId ? " active" : ""}`}>
             <span className="ws-row-title">{displayTitle(p)}</span>
