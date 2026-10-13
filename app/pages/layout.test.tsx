@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { createFakeSupabase } from "@/lib/testing/fakeSupabase";
 
 // jsdom에는 Next.js 라우터가 없으므로 next/navigation만 모킹한다 (헌법 기술 스택 절).
 vi.mock("next/navigation", () => ({
@@ -15,40 +16,8 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-// 업무 페이지는 로그인한 사용자에게만 보이므로, 외부 서비스인 Supabase만 로그인된 상태로 대신한다.
-// store가 쓰는 호출(onAuthStateChange, profile 행 조회)과 같은 모양의 응답을 돌려준다.
-vi.mock("@/lib/supabase", () => {
-  const session = {
-    access_token: "token",
-    refresh_token: "refresh",
-    expires_in: 3600,
-    token_type: "bearer",
-    user: {
-      id: "user-1",
-      aud: "authenticated",
-      email: "user@example.com",
-      app_metadata: { provider: "google" },
-      user_metadata: { full_name: "테스트 사용자" },
-      created_at: "2026-09-01T00:00:00.000Z",
-    },
-  };
-  const client = {
-    auth: {
-      onAuthStateChange: (cb: (event: string, s: typeof session) => void) => {
-        cb("INITIAL_SESSION", session);
-        return { data: { subscription: { id: "sub", callback: cb, unsubscribe: () => {} } } };
-      },
-    },
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () => ({ data: { name: "테스트 사용자", avatar_url: null }, error: null }),
-        }),
-      }),
-    }),
-  };
-  return { AUTH_STORAGE_KEY: "mini-notion:auth", getSupabase: () => client };
-});
+// 업무 페이지는 로그인한 사용자에게만 보이므로, 외부 서비스인 Supabase만 로그인된 메모리 DB로 대신한다.
+vi.mock("@/lib/supabase", () => ({ getSupabase: () => createFakeSupabase().client }));
 
 // store 모듈은 상태를 모듈 안에 캐시하므로 매번 새 모듈로 화면을 그린다 (= 새로고침).
 async function renderWorkspace() {
@@ -96,5 +65,25 @@ describe("업무 페이지 다크 모드", () => {
     const toggle = await renderWorkspace();
     expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(workspaceOf(toggle)).toHaveAttribute("data-theme", "dark");
+  });
+});
+
+describe("사이드바 접기/펼치기", () => {
+  it("버튼을 누르면 접히고, 다시 누르면 펼쳐진다", async () => {
+    const user = userEvent.setup();
+    await renderWorkspace();
+    expect(screen.getByPlaceholderText("/page 입력 후 Enter")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "사이드바 접기" }));
+    expect(screen.queryByPlaceholderText("/page 입력 후 Enter")).not.toBeInTheDocument();
+    expect(screen.queryByText("테스터")).not.toBeInTheDocument();
+    const expand = screen.getByRole("button", { name: "사이드바 펼치기" });
+    expect(expand).toHaveAttribute("aria-expanded", "false");
+    expect(expand).toHaveFocus();
+    expect(screen.getByText("본문")).toBeInTheDocument();
+
+    await user.click(expand);
+    expect(screen.getByPlaceholderText("/page 입력 후 Enter")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "사이드바 접기" })).toHaveAttribute("aria-expanded", "true");
   });
 });
