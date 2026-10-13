@@ -2,20 +2,38 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Button, Input, Tag, Window } from "@/components/ds";
+import { Button, Tag, Window } from "@/components/ds";
 import { signIn, useStore } from "@/lib/store";
 
-// 1a · 로그인 페이지 (F-01 이메일 매직링크 로그인, F-02 로그인 유지)
+// 1a · 로그인 페이지 (F-01 구글 로그인, F-02 로그인 유지)
 export default function LoginPage() {
   const { ready, user } = useStore();
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (ready && user) router.replace("/pages");
   }, [ready, user, router]);
+
+  // Google/Supabase send failures back as ?error=…&error_description=….
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("error")) {
+      setError("구글 로그인을 완료하지 못했습니다.");
+      window.history.replaceState(null, "", "/login");
+    }
+  }, []);
+
+  const startGoogleLogin = async () => {
+    setPending(true);
+    setError("");
+    const { error } = await signIn();
+    // On success the browser is already leaving for Google.
+    if (error) {
+      setError("구글 로그인을 시작하지 못했습니다.");
+      setPending(false);
+    }
+  };
 
   return (
     <div className="login">
@@ -49,41 +67,20 @@ export default function LoginPage() {
               <p style={{ margin: 0, fontSize: 14, lineHeight: 1.4, color: "var(--fg-2)" }}>
                 처음 로그인하면 계정이 자동으로 만들어집니다.
               </p>
-              <form
-                style={{ display: "flex", flexDirection: "column", gap: 12 }}
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  setStatus("sending");
-                  const err = await signIn(email.trim());
-                  setError(err ?? "");
-                  setStatus(err ? "idle" : "sent");
-                }}
+              <Button
+                variant="window"
+                size="lg"
+                style={{ width: "100%", justifyContent: "center", height: 44 }}
+                disabled={pending || !ready}
+                onClick={startGoogleLogin}
               >
-                <Input
-                  label="이메일"
-                  type="email"
-                  required
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setStatus("idle");
-                  }}
-                />
-                <Button
-                  type="submit"
-                  variant="window"
-                  size="lg"
-                  style={{ width: "100%", justifyContent: "center", height: 44 }}
-                  disabled={status === "sending"}
-                >
-                  {status === "sending" ? "보내는 중…" : "로그인 링크 받기"}
-                </Button>
-              </form>
+                <span className="g-mark">G</span>
+                {pending ? "구글로 이동 중…" : "구글 계정으로 로그인"}
+              </Button>
               {error ? (
-                <div className="me-err">{error}</div>
-              ) : status === "sent" ? (
-                <div className="hint">메일함에서 로그인 링크를 눌러 주세요.</div>
+                <div className="me-err" role="alert">
+                  {error}
+                </div>
               ) : (
                 <div className="hint num">로그인 상태는 브라우저를 닫아도 유지됩니다.</div>
               )}

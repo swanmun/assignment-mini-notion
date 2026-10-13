@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
 import RequireAuth from "@/components/RequireAuth";
 import { Button, Input, Window } from "@/components/ds";
-import { fullDate, signOut, updateUser, useStore } from "@/lib/store";
+import { fullDate, saveAvatar, saveNickname, signOut, useStore } from "@/lib/store";
 
 const MAX_NICK = 20;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -26,27 +26,35 @@ function MyPageInner() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [nickname, setNickname] = useState(user!.nickname);
   const [imageError, setImageError] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [nickError, setNickError] = useState("");
 
   const trimmed = nickname.trim();
   const nickValid = trimmed.length >= 1 && trimmed.length <= MAX_NICK;
   const nickChanged = trimmed !== user!.nickname;
 
-  const saveNickname = () => {
-    if (!nickValid || !nickChanged) return;
-    updateUser({ nickname: trimmed });
+  const onSaveNickname = async () => {
+    if (!nickValid || !nickChanged || saving) return;
+    setSaving(true);
+    setNickError("");
+    const { error } = await saveNickname(trimmed);
+    setSaving(false);
+    if (error) return setNickError("별명을 저장하지 못했습니다.");
     setNickname(trimmed);
     setSaved(true);
   };
 
-  const onPickImage = (file: File | undefined) => {
+  const onPickImage = async (file: File | undefined) => {
     if (!file) return;
     if (!IMAGE_TYPES.includes(file.type)) return setImageError("JPG · PNG · WEBP 파일만 올릴 수 있습니다.");
     if (file.size > MAX_IMAGE_BYTES) return setImageError("2MB 이하 이미지만 올릴 수 있습니다.");
     setImageError("");
-    const reader = new FileReader();
-    reader.onload = () => updateUser({ avatarUrl: String(reader.result) });
-    reader.readAsDataURL(file);
+    setUploading(true);
+    const { error } = await saveAvatar(file);
+    setUploading(false);
+    if (error) setImageError("이미지를 올리지 못했습니다.");
   };
 
   return (
@@ -57,8 +65,8 @@ function MyPageInner() {
         </Button>
         <Button
           variant="chip"
-          onClick={() => {
-            signOut();
+          onClick={async () => {
+            await signOut();
             router.replace("/login");
           }}
         >
@@ -107,7 +115,7 @@ function MyPageInner() {
                 )}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <Button variant="window" onClick={() => fileRef.current?.click()}>
+                <Button variant="window" disabled={uploading} onClick={() => fileRef.current?.click()}>
                   이미지 변경
                 </Button>
                 <input
@@ -116,11 +124,17 @@ function MyPageInner() {
                   accept={IMAGE_TYPES.join(",")}
                   hidden
                   onChange={(e) => {
-                    onPickImage(e.target.files?.[0]);
+                    void onPickImage(e.target.files?.[0]);
                     e.target.value = "";
                   }}
                 />
-                {imageError ? <span className="me-err">{imageError}</span> : <span className="hint">JPG · PNG · WEBP, 최대 2MB</span>}
+                {imageError ? (
+                  <span className="me-err" role="alert">
+                    {imageError}
+                  </span>
+                ) : (
+                  <span className="hint">{uploading ? "이미지를 올리는 중…" : "JPG · PNG · WEBP, 최대 2MB"}</span>
+                )}
               </div>
             </div>
 
@@ -130,7 +144,7 @@ function MyPageInner() {
               style={{ display: "flex", gap: 10, alignItems: "flex-end" }}
               onSubmit={(e) => {
                 e.preventDefault();
-                saveNickname();
+                void onSaveNickname();
               }}
             >
               <Input
@@ -140,15 +154,22 @@ function MyPageInner() {
                 onChange={(e) => {
                   setNickname(e.target.value);
                   setSaved(false);
+                  setNickError("");
                 }}
               />
-              <Button type="submit" variant="solid" style={{ height: 30 }} disabled={!nickValid || !nickChanged}>
+              <Button type="submit" variant="solid" style={{ height: 30 }} disabled={!nickValid || !nickChanged || saving}>
                 저장
               </Button>
             </form>
             <div className="hint num" style={{ display: "flex", justifyContent: "space-between", marginTop: -16 }}>
               {trimmed.length === 0 ? (
                 <span className="me-err">빈 값은 저장할 수 없습니다.</span>
+              ) : nickError ? (
+                <span className="me-err" role="alert">
+                  {nickError}
+                </span>
+              ) : saving ? (
+                <span>저장 중…</span>
               ) : saved ? (
                 <span>저장되었습니다.</span>
               ) : (
@@ -161,7 +182,7 @@ function MyPageInner() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 600 }}>이메일</span>
-              <span style={{ fontSize: 15, color: "var(--fg-2)" }}>{user!.email} · 이메일 로그인</span>
+              <span style={{ fontSize: 15, color: "var(--fg-2)" }}>{user!.email} · 구글 계정</span>
             </div>
           </div>
         </Window>
