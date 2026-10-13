@@ -96,3 +96,22 @@ create policy page_update_own on public.page
 drop policy if exists page_delete_own on public.page;
 create policy page_delete_own on public.page
   for delete using ((select auth.uid()) = user_id);
+
+-- ── Storage: profile-image 버킷 (공개 읽기, 2MB, JPG · PNG · WEBP) ──
+-- 파일 이름은 <uuid v4>.<확장자>. profile.image_path에는 버킷 이름 뒤 경로만 저장하고,
+-- 앞부분 주소는 환경 변수 NEXT_PUBLIC_PROFILE_IMAGE_BASE_URL에서 가져온다.
+alter table public.profile add column if not exists image_path text;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('profile-image', 'profile-image', true, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+
+drop policy if exists profile_image_select_own on storage.objects;
+create policy profile_image_select_own on storage.objects
+  for select using (bucket_id = 'profile-image' and owner_id = (select auth.uid())::text);
+drop policy if exists profile_image_insert_own on storage.objects;
+create policy profile_image_insert_own on storage.objects
+  for insert with check (bucket_id = 'profile-image' and owner_id = (select auth.uid())::text);
+drop policy if exists profile_image_delete_own on storage.objects;
+create policy profile_image_delete_own on storage.objects
+  for delete using (bucket_id = 'profile-image' and owner_id = (select auth.uid())::text);

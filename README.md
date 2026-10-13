@@ -12,10 +12,11 @@
 - 업무 페이지 다크 모드 (선택은 브라우저에 저장)
 - 사이드바 접기/펼치기
 - 마이 페이지: 별명 변경, 프로필 이미지 변경, 자기소개
+- 프로필 이미지는 Supabase Storage `profile-image` 버킷에 uuid 파일명으로 저장하고, `profile.image_path`에는 버킷 이름 뒤 경로만 저장
 
 ## 실행
 1. Supabase SQL Editor에서 `supabase/schema.sql` 실행, Authentication에서 Google 로그인 켜기
-2. `.env.example`을 참고해 `.env.local`에 값 입력
+2. `.env.example`을 참고해 `.env.local`에 값 입력 (`NEXT_PUBLIC_PROFILE_IMAGE_BASE_URL` = `https://<project-ref>.supabase.co/storage/v1/object/public/profile-image`)
 3. `npm install && npm run dev` → http://localhost:3000
 
 ## 테스트
